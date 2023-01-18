@@ -8,12 +8,13 @@ cap = cv2.VideoCapture(0)
 fw = 1280
 fh = 720
 
-cap.set(3,fw)
-cap.set(4,fh)
+cap.set(3, fw)
+cap.set(4, fh)
 First = True
 
-def findDistance(p1,p2,img):
-    disColor = (255,146,51)
+
+def findDistance(p1, p2, img,color=(0,0,0)):
+    disColor = (255, 146, 51)
     x1, y1 = p1[:2]
     x2, y2 = p2[:2]
     cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
@@ -21,74 +22,85 @@ def findDistance(p1,p2,img):
     info = (x1, y1, x2, y2, cx, cy)
     if img is not None:
         cv2.circle(img, (x1, y1), 5, disColor, cv2.FILLED)
-        cv2.circle(img, (x2, y2), 5,disColor, cv2.FILLED)
-        cv2.line(img, (x1, y1), (x2, y2),disColor, 3)
-        cv2.circle(img, (cx, cy), 15,disColor, cv2.FILLED)
+        cv2.circle(img, (x2, y2), 5, disColor, cv2.FILLED)
+        cv2.line(img, (x1, y1), (x2, y2), disColor, 3)
+        cv2.circle(img, (cx, cy), 15, color, cv2.FILLED)
         return length, info, img
     else:
         return length, info
+
+
 class DrawCanva():
-    def __init__(self,color=(0,0,255),canvas_width=500,canvas_height=500):
+    def __init__(self, color=(0, 0, 255), canvas_width=500, canvas_height=500):
         self.color = color
         self.cx = 0
         self.cy = 0
         self.canvas_width = canvas_width
         self.canvas_height = canvas_height
-        self.canvas_pos_x ,self.canvas_pos_y = 0,0
+        self.canvas_pos_x, self.canvas_pos_y = 0, 0
         self.canvas = np.zeros((self.canvas_height, self.canvas_width, 3), np.uint8)
         self.image = None
         self.reset = True
         self.previous_center_point = 0
 
-    def centroid(self,p1,p2):
+    def centroid(self, p1, p2):
         x1, y1 = p1[:2]
         x2, y2 = p2[:2]
         return (x1 + x2) // 2, (y1 + y2) // 2
 
-    def draw(self,lmList):
+    def draw(self, lmList):
         p1 = lmList[8]
         p2 = lmList[12]
-        # cv2.circle(img, (p1[0], p1[1]), 10, (0,255,0), cv2.FILLED)
-        # xmargin = 50
-        # width = self.canvas.shape[0]
-        # if self.canvas_pos_x > width/2:
-        #     p1[0] -= width+xmargin
-        #     p2[0] -= width+xmargin
-        self.cx, self.cy = self.centroid(p1,p2)
+        self.cx, self.cy = self.centroid(p1, p2)
+        self.cx -= self.canvas_pos_x
+        self.cy -= self.canvas_pos_y
         if self.reset:
-            self.previous_center_point = (self.cx,self.cy)
+            self.previous_center_point = (self.cx, self.cy)
             self.reset = False
             return "drawing canvas started"
-        cv2.line(self.canvas, self.previous_center_point, (self.cx, self.cy), (0, 0, 255), 10)
+        cv2.line(self.canvas, self.previous_center_point, (self.cx, self.cy),self.color, 10)
         self.previous_center_point = (self.cx, self.cy)
 
-
-
-    def moveCanvas(self,posX,posY):
+    def moveCanvas(self, posX, posY):
         self.canvas_pos_x = posX
         self.canvas_pos_y = posY
 
+    def loadCanvas1(self, image=None):
+        self.image = image
+        canvas_gray = cv2.cvtColor(self.canvas, cv2.COLOR_BGR2GRAY)
+        _, canvas_binary = cv2.threshold(canvas_gray, 20, 255,
+                                         cv2.THRESH_BINARY_INV)
+        canvas_binary = cv2.cvtColor(canvas_binary, cv2.COLOR_GRAY2BGR)
+        self.image = cv2.bitwise_and(self.image, canvas_binary)
+        return cv2.bitwise_or(self.image, self.canvas)
 
-    def loadCanvas(self,image=None):
-        px = self.canvas_pos_x
-        py = self.canvas_pos_y
-        sub_image = image[py:py+board_width,px:px+board_height,:]
-        if sub_image.shape != (board_width,board_height,3):
+    def visible_area(self):
+        c = [self.canvas_pos_x, self.canvas_pos_y, self.canvas_width, self.canvas_height]
+        if self.canvas_pos_x < 0:
+            c[0] = 0
+            c[2] += c[0]
+        if self.canvas_pos_y < 0:
+            c[1] = 0
+            c[3] += c[1]
+        return c
+
+    def loadCanvas(self, image=None):
+        px, py, cw, ch = self.visible_area()
+        sub_image = image[py:py + ch, px:px + cw, :]
+        if sub_image.shape != (ch, cw, 3):
             return image
         canvas_gray = cv2.cvtColor(self.canvas, cv2.COLOR_BGR2GRAY)
         _, canvas_binary = cv2.threshold(canvas_gray, 20, 255,
                                          cv2.THRESH_BINARY_INV)
         canvas_binary = cv2.cvtColor(canvas_binary, cv2.COLOR_GRAY2BGR)
         sub_image = cv2.bitwise_and(sub_image, canvas_binary)
-        sub_image = cv2.bitwise_or(sub_image,self.canvas)
-        image[py:py + board_width, px:px + board_height, :] = sub_image
+        sub_image = cv2.bitwise_or(sub_image, self.canvas)
+        image[py:py + ch, px:px + cw, :] = sub_image
         return image
 
 
-
-
 class Board():
-    def __init__(self,posX=0,posY=0,width=0,height=0,color=(255,255,255),alpha=0.4,drawCanvas=None):
+    def __init__(self, posX=0, posY=0, width=500, height=500, color=(255, 255, 255), alpha=0.4):
         self.image = None
         self.posX = posX
         self.posY = posY
@@ -96,106 +108,145 @@ class Board():
         self.height = height
         self.color = color
         self.alpha = alpha
-        self.drawCanvas = drawCanvas
 
-    def createBoard(self,borderColor=(255,0,0),thickness=5):
-        overlay = self.image.copy()
-        if self.posX < 0 or self.posY < 0:
-            return overlay
+    def createBoard(self, borderColor=(255, 0, 0), thickness=5, dark_bg=False):
+        bg_canvas = np.zeros((self.image.shape[0], self.image.shape[1], 3), np.uint8)
+        overlay = bg_canvas if dark_bg else self.image.copy()
         length = 50
-        leftTopX = [self.posX, self.posY,self.posX+length, self.posY]
-        leftTopY = [self.posX, self.posY,self.posX, self.posY+length]
+        leftTopX = [self.posX, self.posY, self.posX + length, self.posY]
+        leftTopY = [self.posX, self.posY, self.posX, self.posY + length]
 
-        leftBottomY = [self.posX,self.posY+self.height,self.posX,self.posY+self.height-length]
-        leftBottomX = [self.posX,self.posY+self.height,self.posX+length,self.posY+self.height]
+        leftBottomY = [self.posX, self.posY + self.height, self.posX, self.posY + self.height - length]
+        leftBottomX = [self.posX, self.posY + self.height, self.posX + length, self.posY + self.height]
 
-        rightTopX = [self.posX+self.width,self.posY,self.posX+self.width-length,self.posY]
-        rightTopY = [self.posX+self.width,self.posY,self.posX+self.width,self.posY+length]
+        rightTopX = [self.posX + self.width, self.posY, self.posX + self.width - length, self.posY]
+        rightTopY = [self.posX + self.width, self.posY, self.posX + self.width, self.posY + length]
 
-        rightBottomX = [self.posX+self.width, self.posY+self.height,self.posX+self.width-length, self.height+self.posY]
-        rightBottomY = [self.posX+self.width, self.posY+self.height,self.posX+self.width, self.height+self.posY-length]
+        rightBottomX = [self.posX + self.width, self.posY + self.height, self.posX + self.width - length,
+                        self.height + self.posY]
+        rightBottomY = [self.posX + self.width, self.posY + self.height, self.posX + self.width,
+                        self.height + self.posY - length]
 
-        # overlay = self.image.copy() if self.drawCanvas == None else self.drawCanvas.canvas.copy()
-        cv2.rectangle(overlay,(self.posX,self.posY),(self.posX+self.width,self.posY+self.height),self.color, cv2.FILLED)
-        overlay = cv2.addWeighted(overlay,self.alpha,self.image, 1 - self.alpha, 0)
-        corners = [leftTopX,leftTopY,leftBottomX,leftBottomY,rightTopX,rightTopY,rightBottomX,rightBottomY]
+        cv2.rectangle(overlay, (self.posX, self.posY), (self.posX + self.width, self.posY + self.height), self.color,
+                      cv2.FILLED)
+        overlay = cv2.addWeighted(overlay, self.alpha, self.image, 1 - self.alpha, 0)
+        corners = [leftTopX, leftTopY, leftBottomX, leftBottomY, rightTopX, rightTopY, rightBottomX, rightBottomY]
         for c in corners:
             cv2.line(overlay, (c[0], c[1]), (c[2], c[3]), borderColor, thickness)
         return overlay
 
-
-    def moveBoard(self,lmList):
-        cood = [5,9,13,17,0]
-        cx,cy = 0,0
+    def moveBoard(self, lmList):
+        cood = [5, 9, 13, 17, 0]
+        cx, cy = 0, 0
         for i in cood:
             cx += lmList[i][0]
             cy += lmList[i][1]
-        cx = cx/len(cood)
-        cy = cy/len(cood)
+        cx = cx / len(cood)
+        cy = cy / len(cood)
 
-        self.posX = int(cx-self.width/2)
-        self.posY = int(cy-self.height/2)
-        return self.posX,self.posY
+        self.posX = int(cx - self.width / 2)
+        self.posY = int(cy - self.height / 2)
+        return self.posX, self.posY
 
     def getPos(self):
-        return self.posX,self.posY
+        return self.posX, self.posY
 
-    def findGuesture(self,lmList):
+    def findGuesture(self, lmList):
         global First
-        px1,py1 = lmList[20][:2]
-        px2,py2 = lmList[0][:2]
+        px1, py1 = lmList[20][:2]
+        px2, py2 = lmList[0][:2]
 
-        hx1,hy1 = lmList[5][:2]
-        hx2,hy2 = lmList[17][:2]
+        hx1, hy1 = lmList[5][:2]
+        hx2, hy2 = lmList[17][:2]
 
-        pd = math.hypot(px1-px2,py2-py1)
-        hd = math.hypot(hx1-hx2,hy2-hy1)
-        dist = pd/hd
+        pd = math.hypot(px1 - px2, py2 - py1)
+        hd = math.hypot(hx1 - hx2, hy2 - hy1)
+        dist = pd / hd
         return dist
 
 
+class ColorRect():
+    def __init__(self,x,y,color,thickness=-1):
+        self.x = x
+        self.y = y
+        self.color = color
+        self.size = 50
+        self.thickness = thickness
+        self.selected = False
+        self.clicked = False
+        self.inside = False
+    def click(self,hx=None,hy=None,img=None):
+        cv2.rectangle(img,(self.x,self.y),(self.x+self.size,self.y+self.size),self.color, self.thickness)
+        start_point = (self.x, self.y)
+        end_point = (self.x + self.size, self.y + self.size)
+        cv2.rectangle(img, start_point, end_point, (255,255,255), 2)
+        if hx == None:
+            self.selected = False
+            return self.selected
+        if self.x<hx<self.x+self.size and self.y<hy<self.y+self.size:
+            self.selected = True
+            self.drawBorder(img)
+        else:
+            self.selected = False
+        return self.selected
+    def drawBorder(self, img,color=(66,96,245)):
+        if self.selected:
+            start_point = (self.x, self.y)
+            end_point = (self.x + self.size, self.y + self.size)
+            cv2.rectangle(img, start_point, end_point,border_selected_color, 5)
 
 
+colors = [(141,245,66),(245,167,66),(0,0,255),(245,66,167),(66,191,245),(66,239,245),(188,66,245)]
+obj_colors = []
+x_start = 10
+size = 55
+border_selected_color = (190, 255, 0)
+border_hover_color_color = (66,66,245)
+for col in colors:
+    obj_colors.append(ColorRect(x_start,10,col))
+    x_start+=size
 
+detector = HandDetector(maxHands=1, detectionCon=0.8)
 
-
-
-detector = HandDetector(maxHands=1,detectionCon=0.8)
-
-board_width = 500
-board_height = 500
+board_width = 600
+board_height = 400
 
 drawCanvas = DrawCanva(canvas_width=board_width, canvas_height=board_height)
-board = Board(posX=0,posY=0,width=board_width,height=board_height,color=(255,255,255),drawCanvas=drawCanvas)
-
+board = Board(posX=100, posY=100, width=board_width, height=board_height, color=(255, 255, 255))
 
 while True:
-    success,img = cap.read()
-    img = cv2.flip(img,1)
+    success, img = cap.read()
+    img = cv2.flip(img, 1)
+    hand = detector.findHands(img, draw=False)
 
     board.image = img
-    img = board.createBoard(borderColor=(204,33,53),thickness=5)
+    img = board.createBoard(borderColor=(204, 33, 53), thickness=5, dark_bg=True)
     img = drawCanvas.loadCanvas(img)
-    hand = detector.findHands(img,draw=False)
+
+    for oc in obj_colors:
+        oc.click(img=img)
 
     if hand:
         lmList = hand[0]["lmList"]
-        values = findDistance(lmList[8], lmList[12], img)
+        p1 = lmList[8][0], lmList[8][1]
+        p2 = lmList[12][0], lmList[12][1]
+        _, info = findDistance(p1, p2, img,color=drawCanvas.color)[:2]
+        cx, cy = info[4:]
         dist = board.findGuesture(lmList)
-        if dist>2.1:
+        if dist > 2.1:
             drawCanvas.reset = True
-            posx,posy = board.moveBoard(lmList)
-            drawCanvas.moveCanvas(posx,posy)
-        if dist<1.7:
+            posx, posy = board.moveBoard(lmList)
+            drawCanvas.moveCanvas(posx, posy)
+        if dist < 1.7:
             drawCanvas.draw(lmList)
+            for oc in obj_colors:
+                oc.click(hx=cx,hy=cy,img=img)
+                if oc.selected:
+                    drawCanvas.color = oc.color
 
 
 
 
-
-
-
-    cv2.imshow("Image",img)
-    # cv2.imshow("canvas",drawCanvas.canvas)
+    cv2.imshow("Image", img)
     if cv2.waitKey(30) & 0xFF == ord('q'):
         break

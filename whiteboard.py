@@ -13,7 +13,7 @@ cap.set(4, fh)
 First = True
 
 
-def findDistance(p1, p2, img):
+def findDistance(p1, p2, img,color=(0,0,0)):
     disColor = (255, 146, 51)
     x1, y1 = p1[:2]
     x2, y2 = p2[:2]
@@ -24,7 +24,7 @@ def findDistance(p1, p2, img):
         cv2.circle(img, (x1, y1), 5, disColor, cv2.FILLED)
         cv2.circle(img, (x2, y2), 5, disColor, cv2.FILLED)
         cv2.line(img, (x1, y1), (x2, y2), disColor, 3)
-        cv2.circle(img, (cx, cy), 15, disColor, cv2.FILLED)
+        cv2.circle(img, (cx, cy), 15, color, cv2.FILLED)
         return length, info, img
     else:
         return length, info
@@ -58,7 +58,7 @@ class DrawCanva():
             self.previous_center_point = (self.cx, self.cy)
             self.reset = False
             return "drawing canvas started"
-        cv2.line(self.canvas, self.previous_center_point, (self.cx, self.cy), (0, 0, 255), 10)
+        cv2.line(self.canvas, self.previous_center_point, (self.cx, self.cy),self.color, 10)
         self.previous_center_point = (self.cx, self.cy)
 
     def moveCanvas(self, posX, posY):
@@ -165,10 +165,46 @@ class Board():
         return dist
 
 
-class Tool():
-    def __init__(self):
-        pass
+class ColorRect():
+    def __init__(self,x,y,color,thickness=-1):
+        self.x = x
+        self.y = y
+        self.color = color
+        self.size = 50
+        self.thickness = thickness
+        self.selected = False
+        self.clicked = False
+        self.inside = False
+    def click(self,hx=None,hy=None,img=None):
+        cv2.rectangle(img,(self.x,self.y),(self.x+self.size,self.y+self.size),self.color, self.thickness)
+        start_point = (self.x, self.y)
+        end_point = (self.x + self.size, self.y + self.size)
+        cv2.rectangle(img, start_point, end_point, (255,255,255), 2)
+        if hx == None:
+            self.selected = False
+            return self.selected
+        if self.x<hx<self.x+self.size and self.y<hy<self.y+self.size:
+            self.selected = True
+            self.drawBorder(img)
+        else:
+            self.selected = False
+        return self.selected
+    def drawBorder(self, img,color=(66,96,245)):
+        if self.selected:
+            start_point = (self.x, self.y)
+            end_point = (self.x + self.size, self.y + self.size)
+            cv2.rectangle(img, start_point, end_point,border_selected_color, 5)
 
+
+colors = [(141,245,66),(245,167,66),(0,0,255),(245,66,167),(66,191,245),(66,239,245),(188,66,245)]
+obj_colors = []
+x_start = 10
+size = 55
+border_selected_color = (190, 255, 0)
+border_hover_color_color = (66,66,245)
+for col in colors:
+    obj_colors.append(ColorRect(x_start,10,col))
+    x_start+=size
 
 detector = HandDetector(maxHands=1, detectionCon=0.8)
 
@@ -187,9 +223,15 @@ while True:
     img = board.createBoard(borderColor=(204, 33, 53), thickness=5, dark_bg=True)
     img = drawCanvas.loadCanvas(img)
 
+    for oc in obj_colors:
+        oc.click(img=img)
+
     if hand:
         lmList = hand[0]["lmList"]
-        values = findDistance(lmList[8], lmList[12], img)
+        p1 = lmList[8][0], lmList[8][1]
+        p2 = lmList[12][0], lmList[12][1]
+        _, info = findDistance(p1, p2, img,color=drawCanvas.color)[:2]
+        cx, cy = info[4:]
         dist = board.findGuesture(lmList)
         if dist > 2.1:
             drawCanvas.reset = True
@@ -197,6 +239,13 @@ while True:
             drawCanvas.moveCanvas(posx, posy)
         if dist < 1.7:
             drawCanvas.draw(lmList)
+            for oc in obj_colors:
+                oc.click(hx=cx,hy=cy,img=img)
+                if oc.selected:
+                    drawCanvas.color = oc.color
+
+
+
 
     cv2.imshow("Image", img)
     if cv2.waitKey(30) & 0xFF == ord('q'):
