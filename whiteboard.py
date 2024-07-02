@@ -226,8 +226,9 @@ while True:
     for oc in obj_colors:
         oc.click(img=img)
 
-    if hand:
-        lmList = hand[0]["lmList"]
+    if hand[0]:
+        lmList = hand[0][0]["lmList"]
+
         p1 = lmList[8][0], lmList[8][1]
         p2 = lmList[12][0], lmList[12][1]
         _, info = findDistance(p1, p2, img,color=drawCanvas.color)[:2]
