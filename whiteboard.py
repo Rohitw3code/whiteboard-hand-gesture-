@@ -42,6 +42,7 @@ class DrawCanva():
         self.image = None
         self.reset = True
         self.previous_center_point = 0
+        self.is_draw = False
 
     def centroid(self, p1, p2):
         x1, y1 = p1[:2]
@@ -52,8 +53,15 @@ class DrawCanva():
         p1 = lmList[8]
         p2 = lmList[12]
         self.cx, self.cy = self.centroid(p1, p2)
-        self.cx -= self.canvas_pos_x
-        self.cy -= self.canvas_pos_y
+        
+        if self.is_draw:
+            self.cx -= self.canvas_pos_x
+            self.cy -= self.canvas_pos_y
+        else:
+            print("breakinnggg")
+            self.is_draw = False
+
+
         if self.reset:
             self.previous_center_point = (self.cx, self.cy)
             self.reset = False
@@ -152,13 +160,33 @@ class Board():
         return self.posX, self.posY
 
     def findGuesture(self, lmList):
-        global First
-        px1, py1 = lmList[20][:2]
-        px2, py2 = lmList[0][:2]
+        # px1, py1 = lmList[20][:2]
+        # px2, py2 = lmList[0][:2]
 
-        hx1, hy1 = lmList[5][:2]
-        hx2, hy2 = lmList[17][:2]
+        # hx1, hy1 = lmList[5][:2]
+        # hx2, hy2 = lmList[17][:2]
 
+        # pd = math.hypot(px1 - px2, py2 - py1)
+        # hd = math.hypot(hx1 - hx2, hy2 - hy1)
+        # dist = pd / hd
+
+        px1, py1 = lmList[4][:2]
+        px2, py2 = lmList[20][:2]
+
+        hx1, hy1 = lmList[12][:2]
+        hx2, hy2 = lmList[0][:2]
+        pd = math.hypot(px1 - px2, py2 - py1)
+        hd = math.hypot(hx1 - hx2, hy2 - hy1)
+        dist = pd / hd
+
+        return dist
+    
+    def finger_distance(se,lmlist):
+        px1, py1 = lmList[8][:2]
+        px2, py2 = lmList[12][:2]
+
+        hx1, hy1 = lmList[12][:2]
+        hx2, hy2 = lmList[0][:2]
         pd = math.hypot(px1 - px2, py2 - py1)
         hd = math.hypot(hx1 - hx2, hy2 - hy1)
         dist = pd / hd
@@ -189,6 +217,7 @@ class ColorRect():
         else:
             self.selected = False
         return self.selected
+        
     def drawBorder(self, img,color=(66,96,245)):
         if self.selected:
             start_point = (self.x, self.y)
@@ -197,6 +226,8 @@ class ColorRect():
 
 
 colors = [(141,245,66),(245,167,66),(0,0,255),(245,66,167),(66,191,245),(66,239,245),(188,66,245)]
+eraser_color  = (44,44,44) 
+
 obj_colors = []
 x_start = 10
 size = 55
@@ -213,6 +244,7 @@ board_height = 400
 
 drawCanvas = DrawCanva(canvas_width=board_width, canvas_height=board_height)
 board = Board(posX=100, posY=100, width=board_width, height=board_height, color=(255, 255, 255))
+draw = False
 
 while True:
     success, img = cap.read()
@@ -228,23 +260,33 @@ while True:
 
     if hand[0]:
         lmList = hand[0][0]["lmList"]
+        # print("handmark : ",lmList)
 
         p1 = lmList[8][0], lmList[8][1]
         p2 = lmList[12][0], lmList[12][1]
         _, info = findDistance(p1, p2, img,color=drawCanvas.color)[:2]
         cx, cy = info[4:]
-        dist = board.findGuesture(lmList)
-        if dist > 2.1:
+
+        pame_dist = board.findGuesture(lmList)
+        finger_dist = board.finger_distance(lmList)
+
+        # print("finger dist : ",finger_dist)
+        if pame_dist > 0.7:
+            # print(f"moving canva... {pame_dist}")
             drawCanvas.reset = True
             posx, posy = board.moveBoard(lmList)
             drawCanvas.moveCanvas(posx, posy)
-        if dist < 1.7:
+        if finger_dist < 0.18:
+            # print(f"drawing...{finger_dist} . ({finger_dist < 1.1})")
             drawCanvas.draw(lmList)
+            drawCanvas.is_draw = True
             for oc in obj_colors:
                 oc.click(hx=cx,hy=cy,img=img)
                 if oc.selected:
                     drawCanvas.color = oc.color
-
+        else:
+            drawCanvas.is_draw = False
+            print("breaking the drawing")
 
 
 
