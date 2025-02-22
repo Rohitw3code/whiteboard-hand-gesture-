@@ -208,6 +208,7 @@ border_hover_color_color = (66, 66, 245)
 for col in colors:
     obj_colors.append(ColorRect(x_start, 10, col))
     x_start += size
+obj_colors.append(ColorRect(x_start, 10, eraser_color))  # Add eraser rectangle
 
 detector = HandDetector(maxHands=1, detectionCon=0.8)
 
@@ -240,6 +241,14 @@ while True:
         pame_dist = board.findGuesture(lmList)
         finger_dist = board.finger_distance(lmList)
 
+        for oc in obj_colors:
+            oc.click(hx=cx, hy=cy, img=img)
+            if oc.selected:
+                if oc.color == eraser_color:
+                    drawCanvas.canvas = np.zeros((drawCanvas.canvas_height, drawCanvas.canvas_width, 3), np.uint8)
+                else:
+                    drawCanvas.color = oc.color
+
         if pame_dist > 0.7:
             drawCanvas.reset = True
             posx, posy = board.moveBoard(lmList)
@@ -247,13 +256,9 @@ while True:
         if finger_dist < 0.18:
             drawCanvas.is_draw = True
             drawCanvas.draw(lmList)
-            for oc in obj_colors:
-                oc.click(hx=cx, hy=cy, img=img)
-                if oc.selected:
-                    drawCanvas.color = oc.color
         else:
             drawCanvas.is_draw = False
-            drawCanvas.previous_center_point = None  # Reset to start new stroke next time
+            drawCanvas.previous_center_point = None
 
     cv2.imshow("Image", img)
     if cv2.waitKey(30) & 0xFF == ord('q'):
