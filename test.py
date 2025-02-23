@@ -9,7 +9,7 @@ import base64
 
 # Initialize video capture
 cap = cv2.VideoCapture(0)
-fw, fh = 1280, 720
+fw, fh = 1300, 720
 cap.set(3, fw)
 cap.set(4, fh)
 
@@ -122,7 +122,7 @@ class Board:
         cv2.rectangle(overlay, (self.posX, self.posY), (self.posX + self.width, self.posY + self.height), self.color, cv2.FILLED)
         overlay = cv2.addWeighted(overlay, self.alpha, self.image, 1 - self.alpha, 0)
         for c in corners:
-            cv2.line(overlay, (c[0], c[1]), (c[2], c[3]), borderColor, thickness)
+            cv2.line(overlay, (c[0], c[1]), (c[2], c[3]), borderColor, thickness, cv2.LINE_AA)
         return overlay
 
     def moveBoard(self, lmList):
@@ -223,7 +223,7 @@ from PIL import Image
 from io import BytesIO
 
 
-API_KEY = ""  # Replace with your actual Google Gemini API key
+API_KEY = "AIzaSyCGG63veC7HT6B60X6UMCtKSWIk8oJ4hDE"  # Replace with your actual Google Gemini API key
 genai.configure(api_key=API_KEY)
 
 def convert_to_pil(canvas_img):
@@ -286,7 +286,9 @@ obj_colors.append(ColorRect(x_start, 10, eraser_color))  # Add eraser
 
 # Initialize hand detector and board
 detector = HandDetector(maxHands=1, detectionCon=0.8)
-board_width, board_height = 600, 400
+
+board_width, board_height = 800, 600
+
 drawCanvas = DrawCanva(canvas_width=board_width, canvas_height=board_height)
 board = Board(posX=100, posY=100, width=board_width, height=board_height, color=(255, 255, 255))
 save_button = SaveButton(1220, 10)
@@ -302,7 +304,7 @@ while True:
     hand = detector.findHands(img, draw=False)
 
     board.image = img
-    img = board.createBoard(borderColor=(204, 33, 53), thickness=5, dark_bg=True)
+    img = board.createBoard(borderColor=(204, 33, 53), thickness=1, dark_bg=True)
     img = drawCanvas.loadCanvas(img)
 
     for oc in obj_colors:
