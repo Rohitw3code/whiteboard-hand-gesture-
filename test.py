@@ -2,22 +2,32 @@ import math
 import cv2
 import numpy as np
 from cvzone.HandTrackingModule import HandDetector
-import tkinter as tk
 import threading
-import requests
-import base64
-import tkinter as tk
-from tkinter import scrolledtext
 import threading
 import google.generativeai as genai
 import requests
 import threading
 from PIL import Image
-from io import BytesIO
+import tkinter as tk
+from tkinter import ttk, scrolledtext
 
 
 API_KEY = "AIzaSyCGG63veC7HT6B60X6UMCtKSWIk8oJ4hDE"  
+
+# Define HSV range for pink color
+LOWER_COLOR = np.array([128, 62, 0])
+UPPER_COLOR = np.array([179, 254, 255])
+LINE_TICKNESS = 3
+VERTICLE_BUTTON = False
+
+
 genai.configure(api_key=API_KEY)
+
+# Initialize video capture
+cap = cv2.VideoCapture(0)
+fw, fh = 1300, 720
+cap.set(3, fw)
+cap.set(4, fh)
 
 def convert_to_pil(canvas_img):
     """Converts a NumPy image (OpenCV) to a PIL image."""
@@ -41,8 +51,6 @@ def solve_function():
     threading.Thread(target=show_description, args=(description,)).start()
 
 
-import tkinter as tk
-from tkinter import ttk, scrolledtext
 
 def show_description(description):
     """Displays the image description in a modern UI."""
@@ -76,11 +84,6 @@ def show_description(description):
     root.mainloop()
 
 
-# Initialize video capture
-cap = cv2.VideoCapture(0)
-fw, fh = 1300, 720
-cap.set(3, fw)
-cap.set(4, fh)
 
 # Utility function to calculate distance between two points
 def findDistance(p1, p2, img, color=(0, 0, 0)):
@@ -133,7 +136,7 @@ class DrawCanva:
             self.reset = False
             return "drawing canvas started"
         
-        cv2.line(self.canvas, self.previous_center_point, (self.cx, self.cy), self.color, 10)
+        cv2.line(self.canvas, self.previous_center_point, (self.cx, self.cy), self.color, LINE_TICKNESS)
         self.previous_center_point = (self.cx, self.cy)
 
     def moveCanvas(self, posX, posY):
@@ -256,11 +259,11 @@ class ColorRect:
             cv2.rectangle(img, start_point, end_point, color, 5)
 
 class Button:
-    def __init__(self, x, y,text="",color=(55,44,66)):
+    def __init__(self, x=10, y=10,w_size=100,h_size=50,text="",color=(55,44,66)):
         self.x = x
         self.y = y
-        self.w_size = 100
-        self.h_size = 50
+        self.w_size = w_size
+        self.h_size = h_size
         self.hove = False  
         self.text = text
         self.color = color
@@ -276,6 +279,9 @@ class Button:
     def is_hover(self, hx, hy):
         self.hove = self.x <= hx <= self.x + self.w_size and self.y <= hy <= self.y + self.h_size
         return self.hove
+    
+    def setText(self,text):
+        self.text = text
 
 
 # Initialize colors and objects
@@ -306,12 +312,42 @@ board_width, board_height = 800, 600
 drawCanvas = DrawCanva(canvas_width=board_width, canvas_height=board_height)
 board = Board(posX=100, posY=100, width=board_width, height=board_height, color=(255, 255, 255))
 
-solve_button = Button(1000, 10,"Solve",(87,87,222))
-erase_btn = Button(1120, 10,"erase",(87, 152, 222))
+
+if VERTICLE_BUTTON:
+    invisible_button = Button(x=1070,y=10,w_size=200,text="Start Invisible",color=(85,58,64))
+    solve_button = Button(x=1170,y= 60,text="Solve",color=(87,87,222))
+    eraser_button = Button(x=1170, y=110,text="Erase",color=(87, 152, 222))
+else:
+    invisible_button = Button(x=870,y=10,w_size=200,text="Start Invisible",color=(85,58,64))
+    solve_button = Button(x=1070,y= 10,text="Solve",color=(87,87,222))
+    eraser_button = Button(x=1170, y=10,text="Erase",color=(87, 152, 222))
+
+
 
 was_hovering_save = False
 was_solving = False
 save_count = 0
+snapshot = None
+sec = 5
+countdown_active = False
+invisibility_active = False
+
+import time
+
+def countdown_function():
+    global sec, countdown_active, invisibility_active
+    if invisibility_active:
+        invisibility_active = False
+        invisible_button.setText("Start Invisible")
+        return
+    countdown_active = True
+    while sec > 0:
+        invisible_button.setText(f"Start in {sec}")
+        time.sleep(1)  # Wait for 1 second
+        sec -= 1
+    invisible_button.setText("Stop Invisible")
+    invisibility_active = True  # Activate invisibility
+    countdown_active = False  # Reset countdown flag
 
 def solve_function_thread():
     solve_function()
@@ -319,17 +355,30 @@ def solve_function_thread():
 while True:
     success, img = cap.read()
     img = cv2.flip(img, 1)
+
     hand = detector.findHands(img, draw=False)
 
+    if invisibility_active:
+        # Apply invisibility effect
+        if snapshot is None:
+            snapshot = img.copy()
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, LOWER_COLOR, UPPER_COLOR)
+        mask_inv = cv2.bitwise_not(mask)
+        foreground = cv2.bitwise_and(img, img, mask=mask_inv)
+        background = cv2.bitwise_and(snapshot, snapshot, mask=mask)
+        img = cv2.add(background, foreground)
+
     board.image = img
-    img = board.createBoard(borderColor=(204, 33, 53), thickness=1, dark_bg=True)
+    img = board.createBoard(borderColor=(204, 33, 53), thickness=5, dark_bg=True)
     img = drawCanvas.loadCanvas(img)
 
     for oc in obj_colors:
         oc.click(img=img)
     
     solve_button.draw(img)
-    erase_btn.draw(img=img)
+    eraser_button.draw(img=img)
+    invisible_button.draw(img=img)
 
     if hand:
         lmList = hand[0]
@@ -370,8 +419,13 @@ while True:
             else:
                 was_hovering_save = False  # Reset when not hovering
 
-            if erase_btn.is_hover(cx,cy):
+            if eraser_button.is_hover(cx,cy):
                 drawCanvas.canvas = np.zeros((drawCanvas.canvas_height, drawCanvas.canvas_width, 3), np.uint8)
+            
+            if invisible_button.is_hover(cx, cy):
+                if not countdown_active:  # Start countdown only if not already active
+                    sec = 5
+                    threading.Thread(target=countdown_function).start()
 
     cv2.imshow("Image", img)
     if cv2.waitKey(30) & 0xFF == ord('q'):
