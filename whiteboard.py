@@ -4,21 +4,81 @@ import numpy as np
 from cvzone.HandTrackingModule import HandDetector
 import tkinter as tk
 import threading
+import requests
+import base64
 import tkinter as tk
 from tkinter import scrolledtext
+import threading
 import google.generativeai as genai
+import requests
 import threading
 from PIL import Image
+from io import BytesIO
 
 
-API_KEY = "AIzaSyCGG63veC7HT6B60X6UMCtKSWIk8oJ4hDE"  # Replace with your actual Google Gemini API key
+API_KEY = "AIzaSyCGG63veC7HT6B60X6UMCtKSWIk8oJ4hDE"  
 genai.configure(api_key=API_KEY)
 
+def convert_to_pil(canvas_img):
+    """Converts a NumPy image (OpenCV) to a PIL image."""
+    return Image.fromarray(cv2.cvtColor(canvas_img, cv2.COLOR_BGR2RGB))
+
+def get_image_description(pil_img):
+    """Sends the PIL image to Gemini API and retrieves the description."""
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content([pil_img, "Describe this image in short with easy way , if it is a maths problem solve it in simple steps "])
+        return response.text if response else "No description available."
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+def solve_function():
+    """Main function to process the image and get the description."""
+    canvas_img = drawCanvas.canvas  # Assuming `drawCanvas.canvas` is a valid NumPy image array
+    pil_img = convert_to_pil(canvas_img)  # Convert to PIL Image
+    description = get_image_description(pil_img)
+    # Run UI update in a separate thread
+    threading.Thread(target=show_description, args=(description,)).start()
+
+
+import tkinter as tk
+from tkinter import ttk, scrolledtext
+
+def show_description(description):
+    """Displays the image description in a modern UI."""
+    # Preprocess text: Remove asterisks
+    description = description.replace("*", "")
+
+    root = tk.Tk()
+    root.title("Image Description")
+    root.geometry("600x400")  # Increased size for better readability
+    root.configure(bg="#f0f0f0")  # Light gray background
+
+    # Use themed styling for modern UI
+    style = ttk.Style()
+    style.configure("TFrame", background="#ffffff", padding=10)
+    style.configure("TLabel", background="#ffffff", font=("Arial", 14), foreground="#333")
+    
+    # Create main frame
+    frame = ttk.Frame(root, style="TFrame")
+    frame.pack(expand=True, fill="both", padx=20, pady=20)
+
+    # Title Label
+    label = ttk.Label(frame, text="Image Description", style="TLabel", font=("Arial", 16, "bold"))
+    label.pack(pady=10)
+
+    # Scrollable Text Widget
+    text = scrolledtext.ScrolledText(frame, wrap=tk.WORD, font=("Arial", 14), bg="#ffffff", fg="#333333")
+    text.insert(tk.END, description)
+    text.config(state=tk.DISABLED)  # Make text read-only
+    text.pack(expand=True, fill="both")
+
+    root.mainloop()
 
 
 # Initialize video capture
 cap = cv2.VideoCapture(0)
-fw, fh = 1280, 720
+fw, fh = 1300, 720
 cap.set(3, fw)
 cap.set(4, fh)
 
@@ -195,126 +255,39 @@ class ColorRect:
             end_point = (self.x + self.size, self.y + self.size)
             cv2.rectangle(img, start_point, end_point, color, 5)
 
-# Save button class
-class SaveButton:
-    def __init__(self, x, y, size=50):
+class Button:
+    def __init__(self, x, y,text="",color=(55,44,66)):
         self.x = x
         self.y = y
-        self.size = size
-        self.color = (77,45,45)
-        self.thickness = 4
-        self.selected = False
-
+        self.w_size = 100
+        self.h_size = 50
+        self.hove = False  
+        self.text = text
+        self.color = color
 
     def draw(self, img):
-        cv2.rectangle(img, (self.x, self.y), (self.x + self.size+10, self.y + self.size), self.color, self.thickness)
-        start_point = (self.x, self.y)
-        end_point = (self.x + self.size, self.y + self.size)
-        cv2.rectangle(img, start_point, end_point, (255, 255, 255), 2)
-        cv2.putText(img, "Save", (self.x + 5, self.y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
+        # Draw button
+        cv2.rectangle(img, (self.x, self.y), (self.x + self.w_size, self.y + self.h_size),self.color, cv2.FILLED)
+        cv2.putText(img,self.text, (self.x + 20, self.y + 30), cv2.FORMATTER_FMT_PYTHON, 0.7, (255, 255, 255), 2)
+        # Draw hover effect
+        if self.hove:
+            cv2.rectangle(img, (self.x, self.y), (self.x + self.w_size, self.y + self.h_size), (255, 255, 255), 3)
 
     def is_hover(self, hx, hy):
-        h = self.x < hx < self.x + self.size and self.y < hy < self.y + self.size
-        if h:
-            self.drawBorder(img)
-            self.selected = True
-        else:
-            self.selected = False
-        return h
-
-    def drawBorder(self, img, color=(66, 96, 245)):
-        if self.selected:
-            start_point = (self.x, self.y)
-            end_point = (self.x + self.size, self.y + self.size)
-            cv2.rectangle(img, start_point, end_point, color, 5)
-
-
-
-# Solve button class
-class SolveButton:
-    def __init__(self, x, y, size=50):
-        self.x = x
-        self.y = y
-        self.size = size
-        self.color = (55,66,44)
-        self.thickness = 4
-        self.selected = False
-
-
-
-    def draw(self, img, is_hover=False):
-        cv2.rectangle(img, (self.x, self.y), (self.x + self.size+10, self.y + self.size), self.color, self.thickness)
-        start_point = (self.x, self.y)
-        end_point = (self.x + self.size, self.y + self.size)
-        cv2.rectangle(img, start_point, end_point, (255, 255, 255), 2)
-        cv2.putText(img, "Solve", (self.x + 5, self.y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        if is_hover:
-            cv2.rectangle(img, (self.x, self.y), (self.x + self.size, self.y + self.size), (255, 255, 255), 3)
-
-    def is_hover(self, hx, hy):
-        h = self.x < hx < self.x + self.size and self.y < hy < self.y + self.size
-        if h:
-            self.drawBorder(img)
-            self.selected = True
-        else:
-            self.selected = False
-        return h
-
-    def drawBorder(self, img, color=(66, 96, 245)):
-        if self.selected:
-            start_point = (self.x, self.y)
-            end_point = (self.x + self.size, self.y + self.size)
-            cv2.rectangle(img, start_point, end_point, color, 5)
-
-
-def convert_to_pil(canvas_img):
-    """Converts a NumPy image (OpenCV) to a PIL image."""
-    return Image.fromarray(cv2.cvtColor(canvas_img, cv2.COLOR_BGR2RGB))
-
-def get_image_description(pil_img):
-    """Sends the PIL image to Gemini API and retrieves the description."""
-    try:
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content([pil_img, "Describe this image in short with easy way , if it is a maths problem solve it in simple steps "])
-        return response.text if response else "No description available."
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-def solve_function():
-    """Main function to process the image and get the description."""
-    canvas_img = drawCanvas.canvas  # Assuming `drawCanvas.canvas` is a valid NumPy image array
-    pil_img = convert_to_pil(canvas_img)  # Convert to PIL Image
-    description = get_image_description(pil_img)
-
-    # Run UI update in a separate thread
-    threading.Thread(target=show_description, args=(description,)).start()
-
-
-
-
-def show_description(description):
-    """Displays the image description in a better UI."""
-    root = tk.Tk()
-    root.title("Image Description")
-    root.geometry("500x300")  # Set default window size
-    root.configure(bg="#f4f4f4")  # Light gray background
-
-    # Create a frame for better layout
-    frame = tk.Frame(root, bg="#ffffff", padx=10, pady=10)
-    frame.pack(expand=True, fill="both", padx=20, pady=20)
-
-    # Add a scrollable text widget
-    text = scrolledtext.ScrolledText(frame, wrap=tk.WORD, font=("Helvetica", 14, "bold"), bg="#ffffff", fg="#333333")
-    text.insert(tk.END, description)
-    text.config(state=tk.DISABLED)  # Make text read-only
-    text.pack(expand=True, fill="both")
-
-    root.mainloop()
+        self.hove = self.x <= hx <= self.x + self.w_size and self.y <= hy <= self.y + self.h_size
+        return self.hove
 
 
 # Initialize colors and objects
-colors = [(141, 245, 66), (245, 167, 66), (0, 0, 255), (245, 66, 167), (66, 191, 245), (66, 239, 245), (188, 66, 245)]
-
+colors = [
+    (255, 99, 71),    # Tomato Red
+    (30, 144, 255),   # Dodger Blue
+    (50, 205, 50),    # Lime Green
+    (255, 165, 0),    # Orange
+    (186, 85, 211),   # Medium Orchid
+    (64, 224, 208),   # Turquoise
+    (255, 20, 147)    # Deep Pink
+]
 
 eraser_color = (44, 44, 44)
 obj_colors = []
@@ -323,20 +296,26 @@ size = 55
 for col in colors:
     obj_colors.append(ColorRect(x_start, 10, col))
     x_start += size
-obj_colors.append(ColorRect(x_start, 10, eraser_color))  # Add eraser
+# obj_colors.append(ColorRect(x_start, 10, eraser_color))  # Add eraser
 
 # Initialize hand detector and board
 detector = HandDetector(maxHands=1, detectionCon=0.8)
-board_width, board_height = 600, 400
+
+board_width, board_height = 800, 600
+
 drawCanvas = DrawCanva(canvas_width=board_width, canvas_height=board_height)
 board = Board(posX=100, posY=100, width=board_width, height=board_height, color=(255, 255, 255))
-save_button = SaveButton(1100, 20)
-solve_button = SolveButton(1160, 10)
+
+solve_button = Button(1000, 10,"Solve",(87,87,222))
+erase_btn = Button(1120, 10,"erase",(87, 152, 222))
+
 was_hovering_save = False
 was_solving = False
 save_count = 0
 
-# Main loop
+def solve_function_thread():
+    solve_function()
+
 while True:
     success, img = cap.read()
     img = cv2.flip(img, 1)
@@ -349,11 +328,11 @@ while True:
     for oc in obj_colors:
         oc.click(img=img)
     
-    save_button.draw(img)
-    solve_button.draw(img, is_hover=False)
+    solve_button.draw(img)
+    erase_btn.draw(img=img)
 
     if hand:
-        lmList = hand[0]  # Corrected line: hand[0] is the list of landmarks
+        lmList = hand[0]
         if hand[0]:
             lmList = hand[0][0]["lmList"]
             p1 = lmList[8][:2]
@@ -383,32 +362,16 @@ while True:
                 drawCanvas.is_draw = False
                 drawCanvas.previous_center_point = None
 
-            # Save button logic
-            if save_button.is_hover(cx, cy):
+            # Save button logic (ensuring function runs only once per hover and doesn't block UI)
+            if solve_button.is_hover(cx, cy):
                 if not was_hovering_save:
                     was_hovering_save = True
-                    save_count = 1
-                    solve_function()
-                    filename = f"canvas_snapshot_{save_count}.png"
-                    cv2.imwrite(filename, drawCanvas.canvas)
+                    threading.Thread(target=solve_function_thread, daemon=True).start()
             else:
-                was_hovering_save = False
+                was_hovering_save = False  # Reset when not hovering
 
-            # Solve button logic
-            if solve_button.is_hover(cx, cy):
-                thumb_index_dist = math.hypot(lmList[4][0] - lmList[8][0], lmList[4][1] - lmList[8][1])
-                normalizer = math.hypot(lmList[12][0] - lmList[0][0], lmList[12][1] - lmList[0][1])
-                normalized_dist = thumb_index_dist / normalizer
-                if normalized_dist < 0.1:
-                    if not was_solving:
-                        was_solving = True
-                        solve_function()
-                else:
-                    was_solving = False
-            else:
-                was_solving = False
-
-            solve_button.draw(img, is_hover=solve_button.is_hover(cx, cy))
+            if erase_btn.is_hover(cx,cy):
+                drawCanvas.canvas = np.zeros((drawCanvas.canvas_height, drawCanvas.canvas_width, 3), np.uint8)
 
     cv2.imshow("Image", img)
     if cv2.waitKey(30) & 0xFF == ord('q'):
