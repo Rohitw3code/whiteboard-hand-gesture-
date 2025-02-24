@@ -6,6 +6,9 @@ import tkinter as tk
 import threading
 import requests
 import base64
+import tkinter as tk
+from tkinter import scrolledtext
+
 
 # Initialize video capture
 cap = cv2.VideoCapture(0)
@@ -250,8 +253,6 @@ def solve_function():
 
 
 
-import tkinter as tk
-from tkinter import scrolledtext
 
 def show_description(description):
     """Displays the image description in a better UI."""

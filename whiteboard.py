@@ -4,8 +4,17 @@ import numpy as np
 from cvzone.HandTrackingModule import HandDetector
 import tkinter as tk
 import threading
-import requests
-import base64
+import tkinter as tk
+from tkinter import scrolledtext
+import google.generativeai as genai
+import threading
+from PIL import Image
+
+
+API_KEY = "AIzaSyCGG63veC7HT6B60X6UMCtKSWIk8oJ4hDE"  # Replace with your actual Google Gemini API key
+genai.configure(api_key=API_KEY)
+
+
 
 # Initialize video capture
 cap = cv2.VideoCapture(0)
@@ -192,13 +201,34 @@ class SaveButton:
         self.x = x
         self.y = y
         self.size = size
+        self.color = (77,45,45)
+        self.thickness = 4
+        self.selected = False
+
 
     def draw(self, img):
-        cv2.rectangle(img, (self.x, self.y), (self.x + self.size, self.y + self.size), (0, 255, 0), cv2.FILLED)
+        cv2.rectangle(img, (self.x, self.y), (self.x + self.size+10, self.y + self.size), self.color, self.thickness)
+        start_point = (self.x, self.y)
+        end_point = (self.x + self.size, self.y + self.size)
+        cv2.rectangle(img, start_point, end_point, (255, 255, 255), 2)
         cv2.putText(img, "Save", (self.x + 5, self.y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
 
     def is_hover(self, hx, hy):
-        return self.x < hx < self.x + self.size and self.y < hy < self.y + self.size
+        h = self.x < hx < self.x + self.size and self.y < hy < self.y + self.size
+        if h:
+            self.drawBorder(img)
+            self.selected = True
+        else:
+            self.selected = False
+        return h
+
+    def drawBorder(self, img, color=(66, 96, 245)):
+        if self.selected:
+            start_point = (self.x, self.y)
+            end_point = (self.x + self.size, self.y + self.size)
+            cv2.rectangle(img, start_point, end_point, color, 5)
+
+
 
 # Solve button class
 class SolveButton:
@@ -206,25 +236,36 @@ class SolveButton:
         self.x = x
         self.y = y
         self.size = size
+        self.color = (55,66,44)
+        self.thickness = 4
+        self.selected = False
+
+
 
     def draw(self, img, is_hover=False):
-        cv2.rectangle(img, (self.x, self.y), (self.x + self.size, self.y + self.size), (0, 0, 255), cv2.FILLED)
+        cv2.rectangle(img, (self.x, self.y), (self.x + self.size+10, self.y + self.size), self.color, self.thickness)
+        start_point = (self.x, self.y)
+        end_point = (self.x + self.size, self.y + self.size)
+        cv2.rectangle(img, start_point, end_point, (255, 255, 255), 2)
         cv2.putText(img, "Solve", (self.x + 5, self.y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         if is_hover:
             cv2.rectangle(img, (self.x, self.y), (self.x + self.size, self.y + self.size), (255, 255, 255), 3)
 
     def is_hover(self, hx, hy):
-        return self.x < hx < self.x + self.size and self.y < hy < self.y + self.size
+        h = self.x < hx < self.x + self.size and self.y < hy < self.y + self.size
+        if h:
+            self.drawBorder(img)
+            self.selected = True
+        else:
+            self.selected = False
+        return h
 
-import google.generativeai as genai
-import requests
-import threading
-from PIL import Image
-from io import BytesIO
+    def drawBorder(self, img, color=(66, 96, 245)):
+        if self.selected:
+            start_point = (self.x, self.y)
+            end_point = (self.x + self.size, self.y + self.size)
+            cv2.rectangle(img, start_point, end_point, color, 5)
 
-
-API_KEY = "AIzaSyCGG63veC7HT6B60X6UMCtKSWIk8oJ4hDE"  # Replace with your actual Google Gemini API key
-genai.configure(api_key=API_KEY)
 
 def convert_to_pil(canvas_img):
     """Converts a NumPy image (OpenCV) to a PIL image."""
@@ -250,8 +291,6 @@ def solve_function():
 
 
 
-import tkinter as tk
-from tkinter import scrolledtext
 
 def show_description(description):
     """Displays the image description in a better UI."""
@@ -275,6 +314,8 @@ def show_description(description):
 
 # Initialize colors and objects
 colors = [(141, 245, 66), (245, 167, 66), (0, 0, 255), (245, 66, 167), (66, 191, 245), (66, 239, 245), (188, 66, 245)]
+
+
 eraser_color = (44, 44, 44)
 obj_colors = []
 x_start = 10
@@ -289,7 +330,7 @@ detector = HandDetector(maxHands=1, detectionCon=0.8)
 board_width, board_height = 600, 400
 drawCanvas = DrawCanva(canvas_width=board_width, canvas_height=board_height)
 board = Board(posX=100, posY=100, width=board_width, height=board_height, color=(255, 255, 255))
-save_button = SaveButton(1220, 10)
+save_button = SaveButton(1100, 20)
 solve_button = SolveButton(1160, 10)
 was_hovering_save = False
 was_solving = False
