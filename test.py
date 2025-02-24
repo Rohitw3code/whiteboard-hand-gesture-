@@ -1,16 +1,16 @@
 import math
 import cv2
 import numpy as np
-from cvzone.HandTrackingModule import HandDetector
+import os
+import time
 import threading
-import threading
-import google.generativeai as genai
-import requests
-import threading
-from PIL import Image
+import asyncio
 import tkinter as tk
 from tkinter import ttk, scrolledtext
-
+from cvzone.HandTrackingModule import HandDetector
+import google.generativeai as genai
+from PIL import Image
+import os
 
 API_KEY = "AIzaSyCGG63veC7HT6B60X6UMCtKSWIk8oJ4hDE"  
 
@@ -19,6 +19,30 @@ LOWER_COLOR = np.array([128, 62, 0])
 UPPER_COLOR = np.array([179, 254, 255])
 LINE_TICKNESS = 3
 VERTICLE_BUTTON = False
+BG_ALPHA = 0.4  # 0.4 default
+CANVA_WIDTH,CANVA_HEIGHT = 800,400 # 800,400
+
+AUDIO = True
+VOICE = "hi-IN-MadhurNeural" 
+# hi-IN-MadhurNeural , hi-IN-SwaraNeural
+OUTPUT_FILE = "test.mp3"
+
+
+# Initialize colors and objects
+colors = [
+    (0,0,0),   # Warm Peach
+    (255,255,255),   # Teal Green
+    (0,255,0),  # Golden Sand
+    (231, 111, 81),   # Coral Red
+    (138, 201, 38),   # Fresh Green
+    (0,0,255),   # Soft Violet 
+    (255, 173, 173)   # Pastel Pink
+]
+
+eraser_color = (44, 44, 44)
+
+
+
 
 
 genai.configure(api_key=API_KEY)
@@ -28,6 +52,12 @@ cap = cv2.VideoCapture(0)
 fw, fh = 1300, 720
 cap.set(3, fw)
 cap.set(4, fh)
+
+async def _main(ai) -> None:
+    import edge_tts
+    import pygame
+    communicate = edge_tts.Communicate(ai, VOICE)
+    await communicate.save(OUTPUT_FILE)
 
 def convert_to_pil(canvas_img):
     """Converts a NumPy image (OpenCV) to a PIL image."""
@@ -52,36 +82,58 @@ def solve_function():
 
 
 
+
+def run_asyncio_in_thread(description):
+    """Runs the async function in a separate thread."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(_main(description))
+
+def play_audio():
+    import pygame
+    """Plays the audio using pygame instead of playsound."""
+    if os.path.exists(OUTPUT_FILE):
+        pygame.mixer.init()
+        pygame.mixer.music.load(OUTPUT_FILE)
+        pygame.mixer.music.play()
+    else:
+        print("MP3 file not found!")
+
 def show_description(description):
-    """Displays the image description in a modern UI."""
-    # Preprocess text: Remove asterisks
+    """Displays the image description in a modern UI and plays audio in the background."""
     description = description.replace("*", "")
+    os.remove(OUTPUT_FILE)
 
     root = tk.Tk()
     root.title("Image Description")
-    root.geometry("600x400")  # Increased size for better readability
-    root.configure(bg="#f0f0f0")  # Light gray background
+    root.geometry("600x400")
+    root.configure(bg="#f0f0f0")
 
-    # Use themed styling for modern UI
     style = ttk.Style()
     style.configure("TFrame", background="#ffffff", padding=10)
     style.configure("TLabel", background="#ffffff", font=("Arial", 14), foreground="#333")
-    
-    # Create main frame
+
     frame = ttk.Frame(root, style="TFrame")
     frame.pack(expand=True, fill="both", padx=20, pady=20)
 
-    # Title Label
     label = ttk.Label(frame, text="Image Description", style="TLabel", font=("Arial", 16, "bold"))
     label.pack(pady=10)
 
-    # Scrollable Text Widget
     text = scrolledtext.ScrolledText(frame, wrap=tk.WORD, font=("Arial", 14), bg="#ffffff", fg="#333333")
     text.insert(tk.END, description)
-    text.config(state=tk.DISABLED)  # Make text read-only
+    text.config(state=tk.DISABLED)
     text.pack(expand=True, fill="both")
 
+    if AUDIO:
+        import edge_tts
+        import pygame
+        threading.Thread(target=run_asyncio_in_thread, args=(description,), daemon=True).start()
+        time.sleep(2)  # Ensure MP3 file is fully written        
+        threading.Thread(target=play_audio, daemon=True).start()
+
     root.mainloop()
+
+ 
 
 
 
@@ -102,10 +154,11 @@ def findDistance(p1, p2, img, color=(0, 0, 0)):
 
 # Drawing canvas class
 class DrawCanva:
-    def __init__(self, color=(0, 0, 255), canvas_width=500, canvas_height=500):
+    def __init__(self, color=(0, 0, 255), canvas_width=500, canvas_height=500,thickness=10):
         self.color = color
         self.cx = 0
         self.cy = 0
+        self.thickness = thickness
         self.canvas_width = canvas_width
         self.canvas_height = canvas_height
         self.canvas_pos_x, self.canvas_pos_y = 0, 0
@@ -136,7 +189,7 @@ class DrawCanva:
             self.reset = False
             return "drawing canvas started"
         
-        cv2.line(self.canvas, self.previous_center_point, (self.cx, self.cy), self.color, LINE_TICKNESS)
+        cv2.line(self.canvas, self.previous_center_point, (self.cx, self.cy), self.color, self.thickness)
         self.previous_center_point = (self.cx, self.cy)
 
     def moveCanvas(self, posX, posY):
@@ -284,18 +337,6 @@ class Button:
         self.text = text
 
 
-# Initialize colors and objects
-colors = [
-    (255, 99, 71),    # Tomato Red
-    (30, 144, 255),   # Dodger Blue
-    (50, 205, 50),    # Lime Green
-    (255, 165, 0),    # Orange
-    (186, 85, 211),   # Medium Orchid
-    (64, 224, 208),   # Turquoise
-    (255, 20, 147)    # Deep Pink
-]
-
-eraser_color = (44, 44, 44)
 obj_colors = []
 x_start = 10
 size = 55
@@ -307,10 +348,9 @@ for col in colors:
 # Initialize hand detector and board
 detector = HandDetector(maxHands=1, detectionCon=0.8)
 
-board_width, board_height = 800, 600
 
-drawCanvas = DrawCanva(canvas_width=board_width, canvas_height=board_height)
-board = Board(posX=100, posY=100, width=board_width, height=board_height, color=(255, 255, 255))
+drawCanvas = DrawCanva(canvas_width=CANVA_WIDTH, canvas_height=CANVA_HEIGHT,thickness=LINE_TICKNESS)
+board = Board(posX=100, posY=100, width=CANVA_WIDTH, height=CANVA_HEIGHT, color=(255, 255, 255),alpha=BG_ALPHA)
 
 
 if VERTICLE_BUTTON:
@@ -345,7 +385,7 @@ def countdown_function():
         invisible_button.setText(f"Start in {sec}")
         time.sleep(1)  # Wait for 1 second
         sec -= 1
-    invisible_button.setText("Stop Invisible")
+    invisible_button.setText("Restart")
     invisibility_active = True  # Activate invisibility
     countdown_active = False  # Reset countdown flag
 
@@ -395,10 +435,13 @@ while True:
             for oc in obj_colors:
                 oc.click(hx=cx, hy=cy, img=img)
                 if oc.selected:
-                    if oc.color == eraser_color:
-                        drawCanvas.canvas = np.zeros((drawCanvas.canvas_height, drawCanvas.canvas_width, 3), np.uint8)
+                    if oc.color == (0,0,0):
+                        drawCanvas.thickness = 30
+                        drawCanvas.color = (0,0,0)
+
                     else:
                         drawCanvas.color = oc.color
+                        drawCanvas.thickness = LINE_TICKNESS
 
             if pame_dist > 0.7:
                 drawCanvas.reset = True
